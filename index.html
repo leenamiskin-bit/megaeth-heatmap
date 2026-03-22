@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MegaETH Contract Deployment — Lite</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --moon-white: #ECE8E8;
+      --full-moon: #DFD9D9;
+      --night-sky: #19191A;
+      --accent-peach: #F5AF94;
+      --accent-pink: #FF8AA8;
+      --accent-pink-dark: #F786C6;
+      --accent-green: #90D79F;
+      --accent-green-dark: #6DD0A9;
+      --accent-blue: #7EAAD4;
+      --accent-blue-dark: #70BAD2;
+      --text-primary: #19191A;
+      --text-secondary: #6B6767;
+      --text-tertiary: #9E9999;
+      --border-color: rgba(25, 25, 26, 0.12);
+      --border-strong: rgba(25, 25, 26, 0.25);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Helvetica Neue', -apple-system, Arial, sans-serif; background: var(--moon-white); color: var(--text-primary); overflow: hidden; }
+    #container { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+
+    #header { padding: 32px 40px 24px; background: var(--moon-white); border-bottom: 1px solid var(--border-color); }
+    #title { font-size: 42px; font-weight: 800; letter-spacing: -1.5px; text-transform: uppercase; color: var(--text-primary); margin-bottom: 6px; line-height: 1; }
+    #subtitle { font-size: 14px; color: var(--text-secondary); margin-bottom: 20px; }
+    #view-controls { display: flex; gap: 8px; }
+    .view-btn { padding: 8px 22px; background: transparent; border: 1px solid var(--border-strong); color: var(--text-secondary); cursor: pointer; font-size: 12px; font-family: 'DM Mono', 'Courier New', monospace; letter-spacing: 0.5px; text-transform: uppercase; transition: all 0.2s; }
+    .view-btn:hover { border-color: var(--text-primary); color: var(--text-primary); background: rgba(25,25,26,0.04); }
+    .view-btn.active { background: var(--night-sky); border-color: var(--night-sky); color: var(--moon-white); }
+
+    #main-area { flex: 1; display: flex; overflow: hidden; position: relative; }
+
+    #canvas-container { flex: 1; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; background: var(--full-moon); transition: flex 0.25s ease; padding-bottom: 50px; }
+    #canvas-container canvas { display: block; max-width: 100%; max-height: 100%; }
+
+    /* ── SIDE PANEL (click to open) ── */
+    #detail-panel {
+      width: 0; height: 100%; background: var(--moon-white); border-left: 1px solid var(--border-color);
+      overflow: hidden; transition: width 0.25s ease;
+      flex-shrink: 0;
+    }
+    #detail-panel.open { width: 360px; }
+    .panel-inner {
+      width: 360px; height: 100%;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 20px 20px 16px; border-bottom: 1px solid var(--border-color);
+      display: flex; justify-content: space-between; align-items: flex-start; flex-shrink: 0;
+    }
+    .panel-title { font-family: 'DM Mono', 'Courier New', monospace; font-size: 12px; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; }
+    .panel-close {
+      background: none; border: 1px solid var(--border-strong); color: var(--text-tertiary);
+      width: 28px; height: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 16px; transition: all 0.15s; flex-shrink: 0;
+    }
+    .panel-close:hover { border-color: var(--text-primary); color: var(--text-primary); }
+
+    .panel-stats { padding: 16px 20px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+    .panel-stat-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .panel-stat-label { font-family: 'DM Mono', 'Courier New', monospace; font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; }
+    .panel-stat-value { font-size: 12px; color: var(--text-secondary); font-weight: 400; }
+
+    .panel-contracts-header {
+      padding: 14px 20px 10px; flex-shrink: 0;
+      font-family: 'DM Mono', 'Courier New', monospace; font-size: 9px;
+      color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 1px;
+    }
+
+    .panel-contracts { flex: 1; overflow-y: auto; padding: 0 20px 20px; }
+    .panel-contracts::-webkit-scrollbar { width: 4px; }
+    .panel-contracts::-webkit-scrollbar-track { background: rgba(25,25,26,0.03); }
+    .panel-contracts::-webkit-scrollbar-thumb { background: rgba(25,25,26,0.12); border-radius: 2px; }
+
+    .contract-item {
+      display: flex; align-items: center;
+      padding: 8px 12px; margin-bottom: 4px;
+      background: var(--full-moon); border: 1px solid var(--border-color);
+      transition: border-color 0.15s; cursor: pointer; text-decoration: none;
+      color: var(--text-primary);
+    }
+    .contract-item:hover { border-color: var(--accent-pink); }
+    .contract-addr { font-family: 'DM Mono', 'Courier New', monospace; font-size: 11px; flex: 1; }
+    .contract-arrow { font-size: 10px; color: var(--text-tertiary); opacity: 0.6; transition: all 0.15s; }
+    .contract-item:hover .contract-arrow { opacity: 1; color: var(--accent-pink); }
+    .contract-type-badge {
+      font-family: 'DM Mono', 'Courier New', monospace; font-size: 8px;
+      color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 2px 6px; border: 1px solid var(--border-color); margin-left: 8px; flex-shrink: 0;
+    }
+    .contract-deployer {
+      font-family: 'DM Mono', 'Courier New', monospace; font-size: 10px;
+      color: var(--text-tertiary); margin-right: 8px; flex-shrink: 0;
+    }
+
+    #legend { position: absolute; bottom: 0; right: 0; background: var(--full-moon); padding: 6px 14px; z-index: 100; display: flex; align-items: center; gap: 10px; }
+    .legend-title { font-family: 'DM Mono', 'Courier New', monospace; font-size: 9px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
+    .legend-gradient { height: 12px; width: 120px; background: linear-gradient(to right, #D4DEE8, #9CBDE0 45%, #C4ABD8 65%, #FF8AA8); }
+    .legend-labels { display: flex; justify-content: space-between; font-family: 'DM Mono', 'Courier New', monospace; font-size: 9px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; gap: 4px; }
+
+    #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'DM Mono', 'Courier New', monospace; font-size: 14px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; }
+
+    #tooltip { position: fixed; background: var(--night-sky); border: 1px solid rgba(255,255,255,0.1); padding: 12px 14px; pointer-events: none; opacity: 0; transition: opacity 0.15s ease; z-index: 9999; min-width: 220px; max-width: 280px; box-shadow: 0 8px 28px rgba(25,25,26,0.35); }
+    #tooltip.visible { opacity: 1; }
+    .tooltip-header { font-family: 'DM Mono', 'Courier New', monospace; font-size: 11px; color: var(--accent-green); margin-bottom: 8px; font-weight: 500; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .tooltip-section { margin-bottom: 6px; }
+    .tooltip-label { font-family: 'DM Mono', 'Courier New', monospace; font-size: 9px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
+    .tooltip-value { font-size: 11px; color: rgba(255,255,255,0.85); margin-bottom: 2px; }
+    .tooltip-hint { font-family: 'DM Mono', 'Courier New', monospace; font-size: 9px; color: rgba(255,255,255,0.25); margin-top: 8px; text-transform: uppercase; letter-spacing: 0.5px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px; }
+
+    #footer-strip { height: 4px; background: linear-gradient(to right, var(--accent-peach), var(--accent-pink), var(--accent-green), var(--accent-blue)); }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="header">
+      <div id="title">Contract Deployment</div>
+      <div id="subtitle">Contract deployment activity on MegaETH</div>
+      <div id="view-controls">
+        <button class="view-btn active" data-view="daily">24H</button>
+        <button class="view-btn" data-view="monthly">30D</button>
+      </div>
+    </div>
+
+    <div id="main-area">
+      <div id="canvas-container">
+        <div id="loading">Loading data...</div>
+        <div id="tooltip">
+          <div class="tooltip-header" id="tooltip-header"></div>
+          <div id="tooltip-content"></div>
+        </div>
+        <div id="legend">
+          <span class="legend-title">Contracts Deployed</span>
+          <span class="legend-labels">Low</span>
+          <div class="legend-gradient"></div>
+          <span class="legend-labels">High</span>
+        </div>
+      </div>
+
+      <!-- Side detail panel -->
+      <div id="detail-panel">
+        <div class="panel-inner">
+          <div class="panel-header">
+            <div class="panel-title" id="panel-title"></div>
+            <button class="panel-close" id="panel-close">&times;</button>
+          </div>
+          <div class="panel-stats" id="panel-stats"></div>
+          <div class="panel-contracts-header">Deployed Contracts</div>
+          <div class="panel-contracts" id="panel-contracts"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="footer-strip"></div>
+  </div>
+
+  <script>
+    const BLOCKSCOUT_BASE = 'https://megaeth.blockscout.com/address';
+    const LAUNCH_DATE = new Date('2026-02-09T00:00:00Z');
+    const CELL_GAP = 2;
+    const BASE_PADDING = { top: 60, right: 40, bottom: 40, left: 100 };
+    function getPadding() {
+      return { ...BASE_PADDING, left: currentView === 'monthly' ? 120 : 100 };
+    }
+    let app, heatmapCache = {}, currentView = 'daily', detailsCache = new Map();
+    let cellStatsCache = {};
+
+    // ── DATA LOADING ──────────────────────────────────────────────────────────
+    let rawDeployments = null;
+    let dataUpdatedAt = null;
+
+    async function loadData() {
+      const res = await fetch('./contract-deployments.json');
+      if (!res.ok) throw new Error(`Failed to load contract-deployments.json: HTTP ${res.status}`);
+      const json = await res.json();
+      rawDeployments = json.data || [];
+      dataUpdatedAt = json.updated_at || null;
+      if (rawDeployments.length) {
+        console.log('[heatmap] first entry:', rawDeployments[0]);
+        console.log('[heatmap] total records:', rawDeployments.length);
+      }
+      if (dataUpdatedAt) {
+        const d = new Date(dataUpdatedAt);
+        const formatted = d.toLocaleString('en-US', {
+          month: 'short', day: 'numeric', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short'
+        });
+        document.getElementById('subtitle').textContent =
+          `Contract deployment activity on MegaETH · Updated ${formatted}`;
+      }
+    }
+
+    // ── FIELD HELPERS (handles multiple Dune column naming conventions) ────────
+    function getTs(d)   { return new Date(d.block_time || d.timestamp || d.created_at || 0); }
+    function getDep(d)  { return (d.deployer || d.from || d.tx_from || d.creator || '').toLowerCase(); }
+    function getAddr(d) { return d.contract_address || d.address || d.created_contract || ''; }
+    function getHash(d) { return d.tx_hash || d.hash || d.transaction_hash || ''; }
+
+    // ── CLIENT-SIDE AGGREGATION ───────────────────────────────────────────────
+    function buildHeatmapData(view) {
+      if (!rawDeployments) return [];
+      const now = new Date();
+
+      if (view === 'daily') {
+        // Last 14 days × 24 hours
+        const cutoff = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 13));
+        const buckets = new Map();
+
+        for (const d of rawDeployments) {
+          const ts = getTs(d);
+          if (isNaN(ts) || ts < LAUNCH_DATE || ts < cutoff) continue;
+          const key = ts.toISOString().slice(0, 13); // "2026-03-15T14"
+          if (!buckets.has(key)) buckets.set(key, { count: 0, deployers: new Set() });
+          const b = buckets.get(key);
+          b.count++;
+          const dep = getDep(d);
+          if (dep) b.deployers.add(dep);
+        }
+
+        const result = [];
+        for (let dayOffset = 13; dayOffset >= 0; dayOffset--) {
+          const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dayOffset));
+          const dateStr = day.toISOString().slice(0, 10);
+          for (let h = 0; h < 24; h++) {
+            const key = `${dateStr}T${String(h).padStart(2, '0')}`;
+            const b = buckets.get(key);
+            result.push({
+              timestamp: `${key}:00:00.000Z`,
+              contracts_deployed: b ? b.count : 0,
+              unique_deployers:   b ? b.deployers.size : 0,
+              avg_contract_size: 0, p95_contract_size: 0, total_code_bytes: 0,
+              total_deploy_gas: 0, avg_deploy_gas: 0,
+            });
+          }
+        }
+        return result;
+
+      } else if (view === 'monthly') {
+        // Daily totals — organizeMonthlyData() re-grids them into month×day
+        const buckets = new Map();
+        for (const d of rawDeployments) {
+          const ts = getTs(d);
+          if (isNaN(ts) || ts < LAUNCH_DATE) continue;
+          const dateStr = ts.toISOString().slice(0, 10);
+          if (!buckets.has(dateStr)) buckets.set(dateStr, { count: 0, deployers: new Set() });
+          const b = buckets.get(dateStr);
+          b.count++;
+          const dep = getDep(d);
+          if (dep) b.deployers.add(dep);
+        }
+        const result = [];
+        for (const [dateStr, b] of [...buckets.entries()].sort()) {
+          result.push({
+            timestamp: `${dateStr}T00:00:00.000Z`,
+            contracts_deployed: b.count,
+            unique_deployers:   b.deployers.size,
+            avg_contract_size: 0, p95_contract_size: 0, total_code_bytes: 0,
+            total_deploy_gas: 0, avg_deploy_gas: 0,
+          });
+        }
+        return result;
+      }
+
+      return [];
+    }
+
+    function buildAllCellStats(view) {
+      if (!rawDeployments) return {};
+      const now = new Date();
+      let cutoff;
+      if (view === 'daily')        cutoff = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 13));
+      else if (view === 'monthly') cutoff = new Date(now.getTime() - 366 * 86_400_000);
+      else                         cutoff = new Date(now.getTime() - 14  * 86_400_000);
+
+      const result = {};
+      for (const d of rawDeployments) {
+        const ts = getTs(d);
+        if (isNaN(ts) || ts < LAUNCH_DATE || ts < cutoff) continue;
+        const key = ts.toISOString().slice(0, 13); // "2026-03-15T14"
+        if (!result[key]) result[key] = { contracts_deployed: 0, _deployers: new Set(), contracts: [] };
+        const b = result[key];
+        b.contracts_deployed++;
+        const dep = getDep(d);
+        if (dep) b._deployers.add(dep);
+        if (b.contracts.length < 50) {
+          b.contracts.push({ address: getAddr(d), deployer: dep, tx_hash: getHash(d), timestamp: ts.toISOString() });
+        }
+      }
+      for (const key of Object.keys(result)) {
+        result[key].unique_deployers = result[key]._deployers.size;
+        delete result[key]._deployers;
+        result[key].total_deploy_gas = 0;
+        result[key].avg_deploy_gas   = 0;
+        result[key].contract_types   = [];
+      }
+      return result;
+    }
+
+    function buildCellStats(date, hour) {
+      const empty = { contracts_deployed: 0, unique_deployers: 0, total_deploy_gas: 0, avg_deploy_gas: 0, contract_types: [], contracts: [] };
+      if (!rawDeployments) return empty;
+      const tsStart = new Date(`${date}T${String(hour).padStart(2, '00')}:00:00Z`).getTime();
+      const tsEnd   = tsStart + 3_600_000;
+      const deployers = new Set();
+      const contracts = [];
+      for (const d of rawDeployments) {
+        const t = getTs(d).getTime();
+        if (t < tsStart || t >= tsEnd) continue;
+        const dep = getDep(d);
+        if (dep) deployers.add(dep);
+        contracts.push({ address: getAddr(d), deployer: dep, tx_hash: getHash(d), timestamp: new Date(t).toISOString() });
+      }
+      return { contracts_deployed: contracts.length, unique_deployers: deployers.size, total_deploy_gas: 0, avg_deploy_gas: 0, contract_types: [], contracts };
+    }
+
+    // ── CELL STATS PREFETCH / LOOKUP ──────────────────────────────────────────
+    function prefetchAllCellStats(view) {
+      try {
+        const data = buildAllCellStats(view);
+        if (Object.keys(data).length === 0) return;
+        cellStatsCache[view] = data;
+        if (heatmapCache[view]) {
+          for (const cell of heatmapCache[view]) {
+            const key = cell.timestamp.slice(0, 13);
+            if (data[key]) cell.unique_deployers = data[key].unique_deployers;
+          }
+        }
+      } catch (e) {
+        console.warn('prefetchAllCellStats failed:', e);
+      }
+    }
+
+    function getCellDetails(cell) {
+      const date = cell.timestamp.slice(0, 10);
+      const hour = new Date(cell.timestamp).getUTCHours();
+      const key  = `${date}T${String(hour).padStart(2, '0')}`;
+      return cellStatsCache[currentView]?.[key] || buildCellStats(date, hour);
+    }
+
+    // ── RENDERING ─────────────────────────────────────────────────────────────
+    let CELL_SIZE = 28;
+    let panelOpen = false;
+
+    const colorStops = [
+      { pos: 0.0, color: [212, 222, 232] },
+      { pos: 0.2, color: [163, 188, 222] },
+      { pos: 0.4, color: [156, 189, 224] },
+      { pos: 0.6, color: [196, 171, 216] },
+      { pos: 0.8, color: [232, 154, 184] },
+      { pos: 1.0, color: [255, 138, 168] }
+    ];
+
+    const BG_COLOR = 0xDFD9D9;
+    const LABEL_COLOR = 0x9E9999;
+    const EMPTY_CELL_COLOR = 0xD5CFCF;
+    const HIGHLIGHT_COLOR = 0x19191A;
+
+    function interpolateColor(t) {
+      t = Math.max(0, Math.min(1, t));
+      let idx = 0;
+      for (let i = 0; i < colorStops.length - 1; i++) {
+        if (t >= colorStops[i].pos && t <= colorStops[i + 1].pos) { idx = i; break; }
+      }
+      const stop1 = colorStops[idx], stop2 = colorStops[idx + 1];
+      const localT = (t - stop1.pos) / (stop2.pos - stop1.pos);
+      const r = Math.round(stop1.color[0] + (stop2.color[0] - stop1.color[0]) * localT);
+      const g = Math.round(stop1.color[1] + (stop2.color[1] - stop1.color[1]) * localT);
+      const b = Math.round(stop1.color[2] + (stop2.color[2] - stop1.color[2]) * localT);
+      return (r << 16) | (g << 8) | b;
+    }
+
+    function calculatePercentiles(values) {
+      if (values.length === 0) return { p10: 0, p90: 0 };
+      const sorted = [...values].sort((a, b) => a - b);
+      return { p10: sorted[Math.floor(sorted.length * 0.1)], p90: sorted[Math.floor(sorted.length * 0.9)] };
+    }
+
+    function normalizeValue(value, p10, p90) {
+      if (value <= p10) return 0.0;
+      if (value >= p90) return 1.0;
+      return (value - p10) / (p90 - p10);
+    }
+
+    function getGridDimensions(view) {
+      switch (view) {
+        case 'daily':   return { rows: 14, cols: 24 };
+        case 'monthly': return { rows: 12, cols: 31 };
+        default:        return { rows: 14, cols: 24 };
+      }
+    }
+
+    function formatTimeLabel(view, rowIdx, colIdx, timestamp) {
+      const date = new Date(timestamp);
+      switch (view) {
+        case 'daily': return {
+          row: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          col: `${colIdx}:00`,
+          tooltip: `${date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}, ${colIdx}:00\u2013${colIdx + 1}:00`
+        };
+        case 'monthly': return {
+          row: `${date.toLocaleDateString('en-US', { month: 'short' })} ${date.getFullYear()}`,
+          col: `${colIdx + 1}`,
+          tooltip: `${date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}, day ${colIdx + 1}`
+        };
+        default: return { row: `${rowIdx}`, col: `${colIdx}`, tooltip: 'Unknown' };
+      }
+    }
+
+    function organizeMonthlyData(rawData) {
+      const dataMap = new Map();
+      rawData.forEach(cell => {
+        const date = new Date(cell.timestamp);
+        const mk = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (!dataMap.has(mk)) dataMap.set(mk, new Map());
+        dataMap.get(mk).set(date.getDate(), cell);
+      });
+
+      // Start month = max(earliest data date, 2026-02-01) — never show pre-launch months
+      const CLAMP = new Date('2026-02-01T00:00:00.000Z');
+      const earliest = rawData.length ? new Date(rawData[0].timestamp) : CLAMP;
+      const start = new Date(Math.max(earliest.getTime(), CLAMP.getTime()));
+      let sy = start.getFullYear(), sm = start.getMonth();
+
+      const gd = [], now = new Date();
+      const empty = { contracts_deployed: 0, unique_deployers: 0, avg_contract_size: 0, p95_contract_size: 0, total_code_bytes: 0, total_deploy_gas: 0, avg_deploy_gas: 0 };
+      for (let mo = 0; mo < 12; mo++) {
+        const cm = (sm + mo) % 12, cy = sy + Math.floor((sm + mo) / 12);
+        if (cy > now.getFullYear() || (cy === now.getFullYear() && cm > now.getMonth())) {
+          for (let d = 1; d <= 31; d++) gd.push({ timestamp: new Date(cy, cm, d).toISOString(), ...empty });
+          continue;
+        }
+        const mk = `${cy}-${String(cm + 1).padStart(2, '0')}`, md = dataMap.get(mk);
+        for (let d = 1; d <= 31; d++) gd.push(md?.get(d) || { timestamp: new Date(cy, cm, d).toISOString(), ...empty });
+      }
+      return gd;
+    }
+
+    // ── TOOLTIP ──
+    function showTooltip(cell, rowIdx, colIdx, x, y) {
+      const tooltip = document.getElementById('tooltip');
+      const header  = document.getElementById('tooltip-header');
+      const content = document.getElementById('tooltip-content');
+      const labels  = formatTimeLabel(currentView, rowIdx, colIdx, cell.timestamp);
+      header.textContent = labels.tooltip;
+
+      if (cell.contracts_deployed === 0) {
+        content.innerHTML = '<div class="tooltip-value">No contracts deployed</div>';
+      } else {
+        content.innerHTML = `
+          <div class="tooltip-section">
+            <div class="tooltip-label">Deployments</div>
+            <div class="tooltip-value">Contracts: ${cell.contracts_deployed}</div>
+            <div class="tooltip-value">Deployers: ${cell.unique_deployers}</div>
+          </div>
+          <div class="tooltip-hint">Click for details &amp; contract links</div>
+        `;
+      }
+
+      const canvasEl = document.querySelector('#canvas-container canvas');
+      const canvasRect = canvasEl.getBoundingClientRect();
+      const tooltipWidth = 240, tooltipHeight = 160;
+      const resolution = window.devicePixelRatio || 1;
+      const scaleX = canvasRect.width / (app.renderer.width / resolution);
+      const scaleY = canvasRect.height / (app.renderer.height / resolution);
+      const cellLeftVP = canvasRect.left + (x * scaleX);
+      const cellTopVP  = canvasRect.top  + (y * scaleY);
+      const cellWidthCSS = CELL_SIZE * scaleX;
+
+      const gap = 12;
+      let left = cellLeftVP + cellWidthCSS + gap;
+      if (left + tooltipWidth > window.innerWidth - 10) left = cellLeftVP - tooltipWidth - gap;
+      let top = cellTopVP;
+      if (top + tooltipHeight > window.innerHeight - 10) top = window.innerHeight - tooltipHeight - 10;
+      if (top < 10) top = 10;
+
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top  = `${top}px`;
+      tooltip.classList.add('visible');
+    }
+
+    function hideTooltip() {
+      document.getElementById('tooltip').classList.remove('visible');
+    }
+
+    // ── DETAIL PANEL ──
+    function openDetailPanel(cell, labels, details) {
+      const panel     = document.getElementById('detail-panel');
+      const title     = document.getElementById('panel-title');
+      const stats     = document.getElementById('panel-stats');
+      const contracts = document.getElementById('panel-contracts');
+
+      title.textContent = labels.tooltip;
+
+      stats.innerHTML = `
+        <div style="margin-bottom: 12px;">
+          <div class="panel-stat-label" style="margin-bottom: 4px;">Deployment Stats</div>
+          <div class="panel-stat-value">Contracts: ${cell.contracts_deployed}</div>
+          <div class="panel-stat-value">Unique Deployers: ${cell.unique_deployers}</div>
+        </div>
+        ${details.contract_types.length > 0 ? `
+          <div>
+            <div class="panel-stat-label" style="margin-bottom: 4px;">Contract Types</div>
+            ${details.contract_types.map(t => `<div class="panel-stat-value">${t}</div>`).join('')}
+          </div>
+        ` : ''}
+      `;
+
+      if (details.contracts && details.contracts.length > 0) {
+        contracts.innerHTML = details.contracts.map(c => `
+          <a href="${BLOCKSCOUT_BASE}/${c.address}" target="_blank" rel="noopener noreferrer" class="contract-item">
+            <span class="contract-addr">${c.address ? c.address.slice(0, 6) + '...' + c.address.slice(-4) : 'unknown'}</span>
+            <span class="contract-deployer">by ${c.deployer ? c.deployer.slice(0, 6) + '...' + c.deployer.slice(-4) : 'unknown'}</span>
+            <span class="contract-arrow">↗</span>
+          </a>
+        `).join('');
+      } else {
+        contracts.innerHTML = '<div style="color: var(--text-tertiary); font-size: 11px; padding: 10px 0;">No contract details available</div>';
+      }
+
+      panel.classList.add('open');
+      panelOpen = true;
+      setTimeout(() => { const d = heatmapCache[currentView]; if (d) drawHeatmap(d); }, 280);
+    }
+
+    function closeDetailPanel() {
+      document.getElementById('detail-panel').classList.remove('open');
+      panelOpen = false;
+      setTimeout(() => { const d = heatmapCache[currentView]; if (d) drawHeatmap(d); }, 280);
+    }
+
+    function drawHeatmap(data) {
+      if (!app) return;
+      app.stage.removeChildren();
+
+      const container = document.getElementById('canvas-container');
+      const dims = getGridDimensions(currentView);
+      if (currentView === 'monthly') data = organizeMonthlyData(data);
+
+      const legendH = document.getElementById('legend').offsetHeight;
+      const availableWidth  = container.clientWidth - 20;
+      const availableHeight = container.clientHeight - legendH - 20;
+
+      if (dims.forcedCellSize) {
+        CELL_SIZE = dims.forcedCellSize;
+      } else {
+        const maxCellWidth  = (availableWidth  - getPadding().left - getPadding().right)  / (dims.cols + dims.cols * CELL_GAP / 20);
+        const maxCellHeight = (availableHeight - getPadding().top  - getPadding().bottom) / (dims.rows + dims.rows * CELL_GAP / 20);
+        CELL_SIZE = Math.max(Math.min(Math.floor(Math.min(maxCellWidth, maxCellHeight, 35)), 35), 12);
+      }
+      const width  = Math.min(dims.cols * (CELL_SIZE + CELL_GAP) + getPadding().left + getPadding().right,  availableWidth);
+      const height = Math.min(dims.rows * (CELL_SIZE + CELL_GAP) + getPadding().top  + getPadding().bottom, availableHeight);
+      app.renderer.resize(width, height);
+
+      const nonZeroValues = data.filter(d => d.contracts_deployed > 0).map(d => d.contracts_deployed);
+      const { p10, p90 } = calculatePercentiles(nonZeroValues);
+      const grid = new PIXI.Container();
+
+      data.forEach((cell, idx) => {
+        const rowIdx = Math.floor(idx / dims.cols), colIdx = idx % dims.cols;
+        const x = getPadding().left + colIdx * (CELL_SIZE + CELL_GAP);
+        const y = getPadding().top  + rowIdx * (CELL_SIZE + CELL_GAP);
+        const rect = new PIXI.Graphics();
+
+        if (cell.contracts_deployed === 0) {
+          rect.beginFill(EMPTY_CELL_COLOR, 0.45);
+          rect.drawRect(x, y, CELL_SIZE, CELL_SIZE);
+          rect.endFill();
+        } else {
+          rect.beginFill(interpolateColor(normalizeValue(cell.contracts_deployed, p10, p90)));
+          rect.drawRect(x, y, CELL_SIZE, CELL_SIZE);
+          rect.endFill();
+        }
+
+        rect.interactive = true;
+        rect.buttonMode  = true;
+        rect.cursor = 'pointer';
+        const border = new PIXI.Graphics();
+        border.visible = false;
+        grid.addChild(border);
+
+        rect.on('mouseover', () => {
+          rect.alpha = 0.85;
+          border.clear();
+          border.lineStyle(2, HIGHLIGHT_COLOR, 1);
+          border.drawRect(x - 1, y - 1, CELL_SIZE + 2, CELL_SIZE + 2);
+          border.visible = true;
+          showTooltip(cell, rowIdx, colIdx, x, y);
+        });
+        rect.on('mouseout', () => {
+          rect.alpha = 1.0;
+          border.visible = false;
+          hideTooltip();
+        });
+
+        let pointerDownPos = null;
+        rect.on('pointerdown', (e) => {
+          pointerDownPos = { x: e.global.x, y: e.global.y };
+        });
+        rect.on('pointerup', async (e) => {
+          if (!pointerDownPos) return;
+          const dx = Math.abs(e.global.x - pointerDownPos.x);
+          const dy = Math.abs(e.global.y - pointerDownPos.y);
+          pointerDownPos = null;
+          if (dx > 5 || dy > 5) return;
+          if (cell.contracts_deployed === 0) return;
+          const labels  = formatTimeLabel(currentView, rowIdx, colIdx, cell.timestamp);
+          const details = getCellDetails(cell);
+          openDetailPanel({ ...cell, ...details }, labels, details);
+        });
+
+        grid.addChild(rect);
+      });
+
+      // Row labels
+      for (let i = 0; i < dims.rows; i++) {
+        const ts   = data[i * dims.cols]?.timestamp || new Date().toISOString();
+        const text = new PIXI.Text(formatTimeLabel(currentView, i, 0, ts).row, {
+          fontFamily: '"DM Mono", "Courier New", monospace', fontSize: 11, fill: LABEL_COLOR, align: 'right'
+        });
+        text.x = getPadding().left - 15;
+        text.y = getPadding().top + i * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
+        text.anchor.set(1, 0.5);
+        grid.addChild(text);
+      }
+
+      // Column labels
+      const labelStep = currentView === 'daily' ? 3 : 1;
+      for (let i = 0; i < dims.cols; i++) {
+        if (i % labelStep !== 0 && currentView === 'daily') continue;
+        const ts   = data[i]?.timestamp || new Date().toISOString();
+        const text = new PIXI.Text(formatTimeLabel(currentView, 0, i, ts).col, {
+          fontFamily: '"DM Mono", "Courier New", monospace', fontSize: 11, fill: LABEL_COLOR, align: 'center'
+        });
+        text.x = getPadding().left + i * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2;
+        text.y = getPadding().top - 10;
+        text.anchor.set(0.5, 1);
+        grid.addChild(text);
+      }
+
+      app.stage.addChild(grid);
+    }
+
+    // ── LOAD AND DISPLAY ──────────────────────────────────────────────────────
+    function loadAndDisplay() {
+      const loadingEl = document.getElementById('loading');
+
+      if (!heatmapCache[currentView]) {
+        try {
+          heatmapCache[currentView] = buildHeatmapData(currentView);
+        } catch (error) {
+          console.error('Error building heatmap:', error);
+          heatmapCache[currentView] = [];
+        }
+      }
+
+      if (!heatmapCache[currentView].length) {
+        loadingEl.textContent = 'No data yet';
+        loadingEl.style.display = 'block';
+        return;
+      }
+
+      drawHeatmap(heatmapCache[currentView]);
+      loadingEl.style.display = 'none';
+      if (!cellStatsCache[currentView]) prefetchAllCellStats(currentView);
+    }
+
+    // ── INIT ─────────────────────────────────────────────────────────────────
+    async function init() {
+      try {
+        const container = document.getElementById('canvas-container');
+        app = new PIXI.Application({
+          width: container.clientWidth, height: container.clientHeight - document.getElementById('legend').offsetHeight,
+          backgroundColor: BG_COLOR, antialias: true, resolution: window.devicePixelRatio || 1,
+        });
+        container.appendChild(app.view);
+
+        document.getElementById('panel-close').addEventListener('click', closeDetailPanel);
+
+        document.querySelectorAll('.view-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            currentView = e.target.dataset.view;
+            closeDetailPanel();
+            loadAndDisplay();
+          });
+        });
+
+        const loadingEl = document.getElementById('loading');
+        loadingEl.textContent = 'Loading data...';
+        loadingEl.style.display = 'block';
+        await loadData();
+        loadAndDisplay();
+
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+          clearTimeout(resizeTimeout);
+          resizeTimeout = setTimeout(() => { const d = heatmapCache[currentView]; if (d) drawHeatmap(d); }, 250);
+        });
+      } catch (error) {
+        console.error('Fatal error:', error);
+        const loadingEl = document.getElementById('loading');
+        loadingEl.textContent = 'Failed to load data';
+        loadingEl.style.display = 'block';
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else { init(); }
+  </script>
+</body>
+</html>

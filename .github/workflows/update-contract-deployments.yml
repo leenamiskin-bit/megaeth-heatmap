@@ -1,0 +1,77 @@
+name: Update Contract Deployments
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # every 6 hours
+  workflow_dispatch:  # manual trigger
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+
+      - name: Execute Dune query and fetch results
+        run: |
+          # Execute query
+          EXEC_RESPONSE=$(curl -s -X POST \
+            "https://api.dune.com/api/v1/query/6883877/execute" \
+            -H "X-Dune-Api-Key: ${{ secrets.DUNE_API_KEY }}" \
+            -H "Content-Type: application/json")
+
+          EXECUTION_ID=$(echo $EXEC_RESPONSE | python3 -c "import sys,json; print(json.load(sys.stdin)['execution_id'])")
+          echo "Execution ID: $EXECUTION_ID"
+
+          # Poll until complete (max 5 minutes)
+          for i in $(seq 1 30); do
+            sleep 10
+            STATUS_RESPONSE=$(curl -s \
+              "https://api.dune.com/api/v1/execution/$EXECUTION_ID/status" \
+              -H "X-Dune-Api-Key: ${{ secrets.DUNE_API_KEY }}")
+
+            STATE=$(echo $STATUS_RESPONSE | python3 -c "import sys,json; print(json.load(sys.stdin).get('state',''))")
+            echo "Attempt $i: $STATE"
+
+            if [ "$STATE" = "QUERY_STATE_COMPLETED" ]; then
+              break
+            fi
+            if [ "$STATE" = "QUERY_STATE_FAILED" ]; then
+              echo "Query failed"
+              exit 1
+            fi
+          done
+
+          # Fetch results
+          RESULTS=$(curl -s \
+            "https://api.dune.com/api/v1/execution/$EXECUTION_ID/results" \
+            -H "X-Dune-Api-Key: ${{ secrets.DUNE_API_KEY }}")
+
+          # Extract rows and write JSON with metadata
+          echo $RESULTS | python3 -c "
+          import sys, json
+          from datetime import datetime
+          data = json.load(sys.stdin)
+          rows = data.get('result', {}).get('rows', [])
+          output = {
+            'updated_at': datetime.utcnow().isoformat() + 'Z',
+            'total_contracts': len(rows),
+            'query_id': 6883877,
+            'data': rows
+          }
+          with open('contract-deployments.json', 'w') as f:
+            json.dump(output, f)
+          print(f'Wrote {len(rows)} contract deployments')
+          "
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add contract-deployments.json
+          git diff --cached --quiet || (git commit -m "Update contract deployments data $(date -u +%Y-%m-%dT%H:%M:%SZ)" && git push)
