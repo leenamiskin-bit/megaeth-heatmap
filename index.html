@@ -227,25 +227,32 @@
     // ── DATA LOADING ──────────────────────────────────────────────────────────
     let rawDeployments = null;
     let dataUpdatedAt = null;
+    let loadError = null;
 
     async function loadData() {
-      const res = await fetch('./contract-deployments.json');
-      if (!res.ok) throw new Error(`Failed to load contract-deployments.json: HTTP ${res.status}`);
-      const json = await res.json();
-      rawDeployments = json.data || [];
-      dataUpdatedAt = json.updated_at || null;
-      if (rawDeployments.length) {
-        console.log('[heatmap] first entry:', rawDeployments[0]);
-        console.log('[heatmap] total records:', rawDeployments.length);
-      }
-      if (dataUpdatedAt) {
-        const d = new Date(dataUpdatedAt);
-        const formatted = d.toLocaleString('en-US', {
-          month: 'short', day: 'numeric', year: 'numeric',
-          hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short'
-        });
-        document.getElementById('subtitle').textContent =
-          `Contract deployment activity on MegaETH · Updated ${formatted}`;
+      try {
+        const res = await fetch('./contract-deployments.json');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const json = await res.json();
+        rawDeployments = json.data || [];
+        dataUpdatedAt = json.updated_at || null;
+        if (rawDeployments.length) {
+          console.log('[heatmap] first entry:', rawDeployments[0]);
+          console.log('[heatmap] total records:', rawDeployments.length);
+        }
+        if (dataUpdatedAt) {
+          const d = new Date(dataUpdatedAt);
+          const formatted = d.toLocaleString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short'
+          });
+          document.getElementById('subtitle').textContent =
+            `Contract deployment activity on MegaETH · Updated ${formatted}`;
+        }
+      } catch (e) {
+        loadError = e;
+        console.error('[heatmap] loadData failed:', e);
+        throw e;
       }
     }
 
@@ -263,6 +270,7 @@
       if (view === 'daily') {
         // Last 14 days × 24 hours
         const cutoff = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 13));
+        console.log('[heatmap] buildHeatmapData daily: rawDeployments=' + (rawDeployments ? rawDeployments.length : 'null') + ', cutoff=' + cutoff.toISOString() + ', now=' + now.toISOString());
         const buckets = new Map();
 
         for (const d of rawDeployments) {
@@ -728,7 +736,15 @@
       }
 
       if (!heatmapCache[currentView].length) {
-        loadingEl.textContent = 'No data yet';
+        if (loadError) {
+          loadingEl.textContent = 'Load error: ' + loadError.message;
+        } else if (!rawDeployments) {
+          loadingEl.textContent = 'Data not loaded (fetch may have failed)';
+        } else if (rawDeployments.length === 0) {
+          loadingEl.textContent = 'JSON loaded but data array is empty';
+        } else {
+          loadingEl.textContent = 'Data loaded (' + rawDeployments.length + ' records) but all filtered out for ' + currentView + ' view';
+        }
         loadingEl.style.display = 'block';
         return;
       }
@@ -774,7 +790,7 @@
       } catch (error) {
         console.error('Fatal error:', error);
         const loadingEl = document.getElementById('loading');
-        loadingEl.textContent = 'Failed to load data';
+        loadingEl.textContent = 'Error: ' + error.message;
         loadingEl.style.display = 'block';
       }
     }
