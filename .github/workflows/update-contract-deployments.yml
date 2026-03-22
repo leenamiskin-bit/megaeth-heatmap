@@ -19,26 +19,37 @@ jobs:
 
       - name: Fetch Dune query results
         run: |
-          # Fetch latest cached results directly (no re-execution needed)
-          RESULTS=$(curl -s \
+          # Save response to file (avoids shell truncation of large JSON)
+          curl -s \
             "https://api.dune.com/api/v1/query/6883877/results" \
-            -H "X-Dune-Api-Key: ${{ secrets.DUNE_API_KEY }}")
+            -H "X-Dune-Api-Key: ${{ secrets.DUNE_API_KEY }}" \
+            -o raw_results.json
 
-          echo "Row count check:"
-          echo $RESULTS | python3 -c "
-          import sys, json
-          data = json.load(sys.stdin)
-          rows = data.get('result', {}).get('rows', [])
-          print(f'  rows found: {len(rows)}')
-          if rows: print(f'  first row keys: {list(rows[0].keys())}')
+          # Debug: print top-level structure
+          python3 -c "
+          import json
+          with open('raw_results.json') as f:
+            data = json.load(f)
+          print('top-level keys:', list(data.keys()))
+          print('state:', data.get('state'))
+          result = data.get('result') or {}
+          print('result keys:', list(result.keys()))
+          rows = result.get('rows', [])
+          print('rows found:', len(rows))
+          if rows:
+            print('first row keys:', list(rows[0].keys()))
+            print('first row:', rows[0])
+          else:
+            print('raw preview:', str(data)[:300])
           "
 
-          # Write JSON with metadata
-          echo $RESULTS | python3 -c "
-          import sys, json
+          # Write contract-deployments.json
+          python3 -c "
+          import json
           from datetime import datetime, timezone
-          data = json.load(sys.stdin)
-          rows = data.get('result', {}).get('rows', [])
+          with open('raw_results.json') as f:
+            data = json.load(f)
+          rows = (data.get('result') or {}).get('rows', [])
           output = {
             'updated_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             'total_contracts': len(rows),
